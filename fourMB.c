@@ -73,10 +73,9 @@ static int fourMB_init(void)
 	// allocate one byte of memory for storage
 	// kmalloc is just like malloc, the second parameter is// the type of memory to be allocated.
 	// To release the memory allocated by kmalloc, use kfree.
-	fourMB_data = kmalloc(1024*4, GFP_KERNEL);
+	fourMB_data = kmalloc(1024*4000, GFP_KERNEL); //1kB * 4000 = 4MB - allocation 4MB memory
 	if (!fourMB_data) {
 		fourMB_exit();
-		kfree(fourMB_data);
 	// cannot allocate memory
 	// return no memory error, negative signify a failure
 		return -ENOMEM;
