@@ -18,17 +18,37 @@ count, loff_t *f_pos);
 ssize_t onebyte_write(struct file *filep, const char *buf,
 size_t count, loff_t *f_pos);
 static void onebyte_exit(void);
+static loff_t onebyte_lseek(struct file *filep, loff_t offset, int whence);
 
 /* definition of file_operation structure */
 struct file_operations onebyte_fops = {
 	read:onebyte_read,
 	write:onebyte_write,
 	open:onebyte_open,
-	release: onebyte_release
+	release: onebyte_release,
+	llseek: onebyte_lseek
 };
 
 char* onebyte_data = NULL;
 int overflowed_byte = 0;
+
+static loff_t onebyte_lseek(struct file *filep, loff_t offset, int whence)
+{
+	loff_t new_pos = 0;
+	switch(whence)
+	{
+		case 0: new_pos = offset;//SEEK_SET
+				break;
+		case 1: new_pos = filep->f_pos + offset;//SEEK_CURRENT
+				break;
+		case 2: new_pos = size - offset;//SEEK_END --> [0] [1] [2] [3] --> 3
+				break;
+	}
+	if(new_pos > size) new_pos = size;
+	if(new_pos < 0) new_pos = 0;
+	filep->f_pos = new_pos;
+	return new_pos;
+}
 
 int onebyte_open(struct inode *inode, struct file *filep)
 {
