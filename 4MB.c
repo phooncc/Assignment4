@@ -7,8 +7,16 @@
 #include <linux/fs.h>
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
+#include <linux/ioctl.h>
 #define size 4194304//4194304//8,16,32, ... . . . .. 2^22 is the max, I can only max: 2^17
 #define MAJOR_NUMBER 61
+#define SCULL_IOC_MAGIC 'k'
+#define SCULL_HELLO _IO(SCULL_IOC_MAGIC, 1)
+#define SCULL_DEV_MSG _IOW(SCULL_IOC_MAGIC, 2, int)
+#define SCULL_DEV_MSG_LEN _IOW(SCULL_IOC_MAGIC, 3, int)
+#define SCULL_DEV_MSG_TO_USER _IOR(SCULL_IOC_MAGIC, 4, long)
+#define SCULL_DEV_MSG_BI _IOWR(SCULL_IOC_MAGIC, 5, long)
+#define SCULL_IOC_MAXNR 5
 
 /* forward declaration */
 int onebyte_open(struct inode *inode, struct file *filep);
@@ -19,6 +27,7 @@ ssize_t onebyte_write(struct file *filep, const char *buf,
 size_t count, loff_t *f_pos);
 static void onebyte_exit(void);
 static loff_t onebyte_lseek(struct file *filep, loff_t offset, int whence);
+long ioctl_example(struct file *filp, unsigned int cmd, unsigned long arg);
 
 /* definition of file_operation structure */
 struct file_operations onebyte_fops = {
@@ -26,11 +35,53 @@ struct file_operations onebyte_fops = {
 	write:onebyte_write,
 	open:onebyte_open,
 	release: onebyte_release,
-	llseek: onebyte_lseek
+	llseek: onebyte_lseek,
+	unlocked_ioctl: ioctl_example
 };
 
 char* onebyte_data = NULL;
+char* dev_msg = NULL;
 int overflowed_byte = 0;
+int dev_msg_len = 0;
+
+long ioctl_example(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+	int err = 0, tmp, retval = 0;
+	if((_IOC_TYPE(cmd) != SCULL_IOC_MAGIC)||(_IOC_NR(cmd) > SCULL_IOC_MAXNR))return -ENOTTY;
+	if(_IOC_DIR(cmd)&_IOC_READ)err = !access_ok(VERIFY_WRITE, (void __user*)arg, _IOC_SIZE(cmd));
+	if(_IOC_DIR(cmd)&_IOC_WRITE)err = !access_ok(VERIFY_READ, (void __user*)arg, _IOC_SIZE(cmd));
+	if(err)return -EFAULT;
+	switch(cmd){
+		case SCULL_HELLO:
+			printk("Hello!\n");
+			break;
+		case SCULL_DEV_MSG:
+			dev_msg = kmalloc(dev_msg_len, GFP_KERNEL);
+			long dest_address = dev_msg;
+			long source_address = arg;
+			retval = copy_from_user(dest_address, source_address, dev_msg_len);
+			//*(dest_address+len)='\0';
+			printk("%s", dest_address);
+			break;
+		case SCULL_DEV_MSG_LEN:
+			dev_msg_len = arg;
+			printk("message length: %d", dev_msg_len);
+			break;
+		case SCULL_DEV_MSG_TO_USER:
+			retval = copy_to_user(arg, dev_msg, dev_msg_len);
+			break;
+		case SCULL_DEV_MSG_BI:
+			dev_msg = kmalloc(dev_msg_len, GFP_KERNEL);
+			retval = copy_from_user(dev_msg, arg, dev_msg_len);
+			retval = copy_to_user(arg, dev_msg, dev_msg_len);
+			*dev_msg = 'H';
+			printk("%s",dev_msg);
+			break;
+		default:
+			return -ENOTTY;
+	}
+	return retval;
+}
 
 static loff_t onebyte_lseek(struct file *filep, loff_t offset, int whence)
 {
